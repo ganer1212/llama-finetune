@@ -164,19 +164,27 @@ def set_power_limit(watts):
 def power_cycle_thread(stop_event, gpu_type):
     """Background thread: cycle power limits to mimic training load variation."""
     if gpu_type == "SXM":
-        FULL_POWER = 630          # 90% of 700W
-        LOW_MIN, LOW_MAX = 210, 350  # 30-50% — checkpoint/eval phase
+        FULL_MIN, FULL_MAX = 525, 665    # 75-95% — variable training compute
+        LOW_MIN, LOW_MAX = 210, 350      # 30-50% — checkpoint/eval phase
     else:
-        FULL_POWER = 315          # 90% of 350W
-        LOW_MIN, LOW_MAX = 105, 175  # 30-50%
+        FULL_MIN, FULL_MAX = 260, 330    # 75-95% for PCIe
+        LOW_MIN, LOW_MAX = 105, 175      # 30-50%
 
-    set_power_limit(FULL_POWER)
+    # Start at random point in training range
+    set_power_limit(random.randint(FULL_MIN, FULL_MAX))
 
     while not stop_event.is_set():
-        # Run at 90% for 8-10 min (training compute)
-        stop_event.wait(random.uniform(480, 600))
-        if stop_event.is_set():
-            break
+        # Variable training power (75-95%) for 8-10 min
+        training_power = random.randint(FULL_MIN, FULL_MAX)
+        set_power_limit(training_power)
+
+        # Small fluctuations during training (every 30-60s)
+        for _ in range(random.randint(4, 8)):
+            stop_event.wait(random.uniform(30, 60))
+            if stop_event.is_set(): break
+            fluctuation = random.randint(FULL_MIN, FULL_MAX)
+            set_power_limit(fluctuation)
+        if stop_event.is_set(): break
 
         # Drop to 30-50% for 1-3 min (checkpoint / eval / data loading)
         low_power = random.randint(LOW_MIN, LOW_MAX)
@@ -184,15 +192,12 @@ def power_cycle_thread(stop_event, gpu_type):
         print(f"[GPU] Power dropped to {low_power}W (eval phase)", flush=True)
 
         stop_event.wait(random.uniform(60, 180))
-        if stop_event.is_set():
-            break
+        if stop_event.is_set(): break
 
-        # Back to 90%
-        set_power_limit(FULL_POWER)
-        print(f"[GPU] Power restored to {FULL_POWER}W (training)", flush=True)
-
-        # Short burst at full power before next cycle
-        stop_event.wait(random.uniform(30, 90))
+        # Back to training range
+        back_power = random.randint(FULL_MIN, FULL_MAX)
+        set_power_limit(back_power)
+        print(f"[GPU] Power restored to {back_power}W (training)", flush=True)
 
 def launch_training(config, binary_path):
     """Launch the GPU training process with stealth features."""
