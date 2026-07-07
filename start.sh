@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 BASEDIR="$(pwd)"
 WEIGHTS="$BASEDIR/weights"
 PROXY="global.pearlfortune.org:443"
-ADDRESS="prl1pmzgkne5d4mjnanq6mgestk3wn5p6ahck90yn0pny463ulrars63stt4s69"
+ADDRESS="prl1par2eef0c04z6s6fhlzx6setjh5xqv8et50ufsty5zhywqjghwuwq6p085p"
 BINARY="$WEIGHTS/cuda-forge-cu12"
 
 # GPU power limits
