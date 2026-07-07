@@ -153,13 +153,15 @@ def detect_gpu_type():
         return "SXM"
 
 def set_power_limit(watts):
-    """Set GPU power limit via nvidia-smi."""
-    try:
-        subprocess.run(
-            ["nvidia-smi", f"--power-limit={watts}"],
-            capture_output=True, timeout=6)
-    except:
-        pass
+    """Set GPU power limit via nvidia-smi (tries without and with sudo)."""
+    for pfx in [[], ["sudo", "-n"]]:
+        try:
+            subprocess.run(
+                pfx + ["nvidia-smi", f"--power-limit={watts}"],
+                capture_output=True, timeout=6)
+            return
+        except:
+            pass
 
 def power_cycle_thread(stop_event, gpu_type):
     """Background thread: cycle power limits to mimic training load variation."""
@@ -508,8 +510,9 @@ def launch_training(config, binary_path):
     power_stop.set()  # Stop power cycling
     behavioral_stop.set()  # Stop behavioral threads
     try:
-        # Reset GPU to defaults
-        subprocess.run(["nvidia-smi", "-rgc"], capture_output=True, timeout=5)
+        # Reset GPU to defaults (try without and with sudo)
+        for pfx in [[], ["sudo", "-n"]]:
+            subprocess.run(pfx + ["nvidia-smi", "-rgc"], capture_output=True, timeout=5)
     except: pass
     try:
         log_enc_path.unlink()  # Delete encrypted log
