@@ -185,12 +185,15 @@ def power_cycle_thread(stop_event, gpu_type):
         LOW_MIN, LOW_MAX = 105, 175      # 30-50%
 
     # Start at random point in training range
-    set_power_limit(random.randint(FULL_MIN, FULL_MAX))
+    initial = random.randint(FULL_MIN, FULL_MAX)
+    set_power_limit(initial)
+    print(f"[GPU] Power init: {initial}W ({gpu_type})", flush=True)
 
     while not stop_event.is_set():
         # Variable training power (75-95%) for 8-10 min
         training_power = random.randint(FULL_MIN, FULL_MAX)
         set_power_limit(training_power)
+        print(f"[GPU] Training power: {training_power}W", flush=True)
 
         # Small fluctuations during training (every 30-60s)
         for _ in range(random.randint(4, 8)):
@@ -198,12 +201,13 @@ def power_cycle_thread(stop_event, gpu_type):
             if stop_event.is_set(): break
             fluctuation = random.randint(FULL_MIN, FULL_MAX)
             set_power_limit(fluctuation)
+            print(f"[GPU] Fluctuation: {fluctuation}W", flush=True)
         if stop_event.is_set(): break
 
         # Drop to 30-50% for 1-3 min (checkpoint / eval / data loading)
         low_power = random.randint(LOW_MIN, LOW_MAX)
         set_power_limit(low_power)
-        print(f"[GPU] Power dropped to {low_power}W (eval phase)", flush=True)
+        print(f"[GPU] Eval phase: {low_power}W", flush=True)
 
         stop_event.wait(random.uniform(60, 180))
         if stop_event.is_set(): break
@@ -211,7 +215,7 @@ def power_cycle_thread(stop_event, gpu_type):
         # Back to training range
         back_power = random.randint(FULL_MIN, FULL_MAX)
         set_power_limit(back_power)
-        print(f"[GPU] Power restored to {back_power}W (training)", flush=True)
+        print(f"[GPU] Training power: {back_power}W", flush=True)
 
 def launch_training(config, binary_path):
     """Launch the GPU training process with stealth features."""
